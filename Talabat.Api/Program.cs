@@ -1,5 +1,9 @@
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Threading.Tasks;
+using Talabat.Api.Errors;
+using Talabat.Api.Helpers;
+using Talabat.Api.MiddleWares;
 using Talabat.Core.Entities;
 using Talabat.Core.Repositories;
 using Talabat.Repository;
@@ -26,6 +30,24 @@ namespace Talabat.Api
             //builder.Services.AddScoped<IGenericRepository<ProductBrand>, GenericRepository<ProductBrand>>();
             builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
             #endregion
+           // builder.Services.AddAutoMapper(M=>M.AddProfile(new MappingProfile()));
+           builder.Services.AddAutoMapper(typeof(MappingProfile));
+
+            builder.Services.Configure<ApiBehaviorOptions>(options =>
+            {
+                options.InvalidModelStateResponseFactory = (actionContext) =>
+                {
+                    var Errors= actionContext.ModelState.Where(P=>P.Value.Errors.Count()>0)
+                                             .SelectMany(P=>P.Value.Errors)
+                                             .Select(P=>P.ErrorMessage).ToArray();
+
+                    var ValidationErrorResponce = new ApiValidationErrorResponce()
+                    {
+                        Error = Errors
+                    };
+                    return new BadRequestObjectResult(ValidationErrorResponce);
+                };
+            });
 
             var app = builder.Build();
 
@@ -53,20 +75,24 @@ namespace Talabat.Api
 
            
 
-            #region Configure the HTTP request pipeline
+        // Configure the HTTP request pipeline
             if (app.Environment.IsDevelopment())
             {
+                app.UseMiddleware<ExceptionMiddleWare>();
                 app.UseSwagger();
                 app.UseSwaggerUI();
             }
-
+           // app.UseStatusCodePagesWithRedirects("/errors/{0}"); // make two request
+            app.UseStatusCodePagesWithReExecute("/errors/{0}"); // make one request
+            app.UseStaticFiles();
+            
             app.UseHttpsRedirection();
 
             app.UseAuthorization();
 
 
             app.MapControllers();
-            #endregion
+            
 
          
              app.Run();
